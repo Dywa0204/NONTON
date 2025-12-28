@@ -1,0 +1,423 @@
+{
+	"info": {
+		"_postman_id": "b1a2c3d4-e5f6-7890-1234-567890abcdef",
+		"name": "Movie Backend API (Express TS)",
+		"description": "Collection untuk testing backend download film dan series.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Set Root Drive",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"drive\": \"E:/\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/root-drive",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"root-drive"
+					]
+				},
+				"description": "Mengatur drive root Windows (misal E:/ atau D:/Films)."
+			},
+			"response": []
+		},
+		{
+			"name": "2. Sync Files",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/sync",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"sync"
+					]
+				},
+				"description": "Membaca struktur direktori dari Root Drive dan menyimpannya ke JSON database."
+			},
+			"response": []
+		},
+		{
+			"name": "3. Get All Root Files",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/files",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"files"
+					]
+				},
+				"description": "Mendapatkan daftar file/folder di level paling atas."
+			},
+			"response": []
+		},
+		{
+			"name": "4. Get Specific Dir/File (by UUID)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/files?uuid={{uuid}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"files"
+					],
+					"query": [
+						{
+							"key": "uuid",
+							"value": "{{uuid}}",
+							"description": "Masukkan UUID folder atau file hasil dari response Sync"
+						}
+					]
+				},
+				"description": "Melihat isi folder anak atau detail file tertentu."
+			},
+			"response": []
+		},
+		{
+			"name": "5a. Update Meta (Movie)",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"type\": \"movie\",\n    \"tmdbId\": \"550\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/meta/:uuid",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"meta",
+						":uuid"
+					],
+					"variable": [
+						{
+							"key": "uuid",
+							"value": "{{uuid}}"
+						}
+					]
+				},
+				"description": "Update metadata file menjadi Movie (Fight Club ID 550)."
+			},
+			"response": []
+		},
+		{
+			"name": "5b. Update Meta (Episode)",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"type\": \"episode\",\n    \"tmdbId\": \"1399\",\n    \"season_number\": 1,\n    \"episode_number\": 1\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/meta/:uuid",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"meta",
+						":uuid"
+					],
+					"variable": [
+						{
+							"key": "uuid",
+							"value": "{{uuid}}"
+						}
+					]
+				},
+				"description": "Update metadata file menjadi Episode TV (Game of Thrones S01E01)."
+			},
+			"response": []
+		},
+		{
+			"name": "6. Get Media List (Filter/Search)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/media?search=fight&year=1999",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"media"
+					],
+					"query": [
+						{
+							"key": "search",
+							"value": "fight",
+							"description": "Optional: Cari judul"
+						},
+						{
+							"key": "genre",
+							"value": "Drama",
+							"disabled": true,
+							"description": "Optional"
+						},
+						{
+							"key": "year",
+							"value": "1999",
+							"description": "Optional"
+						},
+						{
+							"key": "country",
+							"value": "United States of America",
+							"disabled": true,
+							"description": "Optional"
+						}
+					]
+				},
+				"description": "Mencari file yang sudah memiliki Meta Movie/TV."
+			},
+			"response": []
+		},
+		{
+			"name": "7. Extract Embedded Subtitles",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/subtitles/extract/:uuid",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"subtitles",
+						"extract",
+						":uuid"
+					],
+					"variable": [
+						{
+							"key": "uuid",
+							"value": "{{uuid}}"
+						}
+					]
+				},
+				"description": "Meng-extract subtitle bawaan mkv/mp4."
+			},
+			"response": []
+		},
+		{
+			"name": "8a. Update Subtitle (Upload File)",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "subtitle",
+							"type": "file",
+							"description": "Pilih file .srt"
+						},
+						{
+							"key": "label",
+							"value": "Indonesian Upload",
+							"type": "text"
+						},
+						{
+							"key": "language",
+							"value": "id",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/subtitles/:uuid",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"subtitles",
+						":uuid"
+					],
+					"variable": [
+						{
+							"key": "uuid",
+							"value": "{{uuid}}"
+						}
+					]
+				},
+				"description": "Upload file subtitle manual (.srt)."
+			},
+			"response": []
+		},
+		{
+			"name": "8b. Update Subtitle (Link Extracted)",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"extractedPath\": \"C:\\\\Full\\\\Path\\\\To\\\\temp\\\\file.srt\",\n    \"label\": \"Embedded English\",\n    \"language\": \"en\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/subtitles/:uuid",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"subtitles",
+						":uuid"
+					],
+					"variable": [
+						{
+							"key": "uuid",
+							"value": "{{uuid}}"
+						}
+					]
+				},
+				"description": "Menambahkan subtitle ke list JSON dari hasil extract (bukan upload)."
+			},
+			"response": []
+		},
+		{
+			"name": "9. Download File",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/download/file/:uuid",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"download",
+						"file",
+						":uuid"
+					],
+					"variable": [
+						{
+							"key": "uuid",
+							"value": "{{uuid}}"
+						}
+					]
+				},
+				"description": "Download single file."
+			},
+			"response": []
+		},
+		{
+			"name": "10. Download Directory (ZIP)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/download/dir/:uuid",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"download",
+						"dir",
+						":uuid"
+					],
+					"variable": [
+						{
+							"key": "uuid",
+							"value": "{{uuid}}"
+						}
+					]
+				},
+				"description": "Download folder sebagai zip."
+			},
+			"response": []
+		},
+		{
+			"name": "11. Stream Video",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/stream/:uuid",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"stream",
+						":uuid"
+					],
+					"variable": [
+						{
+							"key": "uuid",
+							"value": "{{uuid}}"
+						}
+					]
+				},
+				"description": "Streaming endpoint (Range header)."
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000/api",
+			"type": "string"
+		},
+		{
+			"key": "uuid",
+			"value": "PLACEHOLDER_UUID_HERE",
+			"type": "string",
+			"description": "Ganti dengan UUID dari response /files"
+		}
+	]
+}

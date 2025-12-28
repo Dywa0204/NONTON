@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Streaming Player</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #121212; color: #e0e0e0; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
+        .container { width: 100%; max-width: 900px; }
+        
+        /* Video Container */
+        .video-wrapper { position: relative; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.7); }
+        video { width: 100%; display: block; }
+
+        /* Custom Control Bar */
+        .custom-controls { 
+            background: #1f1f1f; 
+            padding: 15px; 
+            border-bottom-left-radius: 8px; 
+            border-bottom-right-radius: 8px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px;
+        }
+
+        /* Slider Styling */
+        input[type=range] {
+            appearance: none;
+            -webkit-appearance: none; width: 100%; background: transparent; cursor: pointer;
+        }
+        input[type=range]:focus { outline: none; }
+        
+        /* Track Slider */
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 8px; cursor: pointer;
+            background: #444; border-radius: 4px;
+        }
+        /* Thumb (Kepala) Slider */
+        input[type=range]::-webkit-slider-thumb {
+            height: 16px; width: 16px; border-radius: 50%; background: #007bff;
+            cursor: pointer; -webkit-appearance: none; margin-top: -4px; 
+            box-shadow: 0 0 5px rgba(0,0,0,0.5); transition: background 0.2s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover { background: #3395ff; transform: scale(1.2); }
+
+        .time-display { font-family: monospace; font-size: 0.9rem; color: #aaa; display: flex; justify-content: space-between; }
+        
+        .control-panel { background: #222; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #444; background: #333; color: white; border-radius: 4px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        
+        .meta-info { margin-top: 15px; padding: 15px; background: #1e1e1e; border-radius: 8px; }
+        select { padding: 5px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>🎬 Smart Player (MKV Support)</h2>
+        
+        <div class="control-panel">
+            <input type="text" id="uuidInput" placeholder="Paste UUID File Disini..." value="">
+            <button onclick="loadVideo()">▶ LOAD MOVIE</button>
+        </div>
+
+        <div class="video-wrapper">
+            <video id="videoPlayer" crossorigin="anonymous" onclick="togglePlay()">
+                Browser Anda tidak mendukung tag video.
+            </video>
+
+            <div class="custom-controls">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 0.8rem; color: #007bff; font-weight: bold;">TIMELINE:</span>
+                    <input type="range" id="globalSlider" value="0" min="0" step="1" disabled onchange="userSeek(this.value)" oninput="updateLabel(this.value)">
+                </div>
+                
+                <div class="time-display">
+                    <span id="currentTimeText">00:00:00</span>
+                    <span id="totalTimeText">00:00:00</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="meta-info">
+            <h3 id="videoTitle" style="margin-top:0">Judul: -</h3>
+            <p id="codecInfo" style="color: #888; font-size: 0.85rem;"></p>
+            
+            <div style="margin-top: 10px; border-top: 1px solid #333; padding-top: 10px;">
+                <label>Subtitle: </label>
+                <select id="subtitleSelect" onchange="changeSubtitle()">
+                    <option value="">Matikan Subtitle</option>
+                </select>
+                <span id="subStatus" style="font-size: 0.8em; margin-left: 10px; color: #aaa;"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5050/api'; // Ganti port jika perlu
+        const BASE_URL = 'http://localhost:5050';
+
+        const videoPlayer = document.getElementById('videoPlayer');
+        const globalSlider = document.getElementById('globalSlider');
+        const currentTimeText = document.getElementById('currentTimeText');
+        const totalTimeText = document.getElementById('totalTimeText');
+        const subtitleSelect = document.getElementById('subtitleSelect');
+
+        let cachedSubtitles = [];
+        
+        // GLOBAL STATE
+        let totalDurationSeconds = 0;
+        let currentStreamOffset = 0; // Menyimpan kita start streaming dari detik ke berapa
+
+        // Helper Format Waktu (Detik -> HH:MM:SS)
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            return `${h > 0 ? h + ':' : ''}${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`;
+        }
+
+        async function loadVideo() {
+            const uuid = document.getElementById('uuidInput').value.trim();
+            if (!uuid) return alert("Masukkan UUID!");
+
+            // Reset UI
+            videoPlayer.pause();
+            videoPlayer.innerHTML = ''; 
+            subtitleSelect.innerHTML = '<option value="">Matikan Subtitle</option>';
+            document.getElementById('videoTitle').innerText = "Loading Metadata...";
+            globalSlider.disabled = true;
+            globalSlider.value = 0;
+            currentStreamOffset = 0;
+
+            try {
+                // 1. Get Metadata
+                const res = await fetch(`${API_BASE}/files?uuid=${uuid}`);
+                if (!res.ok) throw new Error("File not found");
+                const node = await res.json();
+
+                // 2. Set Info UI
+                document.getElementById('videoTitle').innerText = node.name;
+                
+                // DETEKSI DURASI (PENTING UNTUK SLIDER)
+                if (node.mediaInfo && node.mediaInfo.duration) {
+                    totalDurationSeconds = Math.floor(node.mediaInfo.duration);
+                    document.getElementById('codecInfo').innerText = `Source: ${node.mediaInfo.codec.toUpperCase()} | ${node.mediaInfo.width}x${node.mediaInfo.height}`;
+                } else if (node.meta && node.meta.runtime) {
+                    totalDurationSeconds = node.meta.runtime * 60; // Menit ke Detik
+                    document.getElementById('codecInfo').innerText = "Source: Unknown (Using TMDB Duration)";
+                } else {
+                    totalDurationSeconds = 0; // Fallback jika gagal detect
+                    alert("Durasi file tidak terdeteksi! Slider mungkin tidak akurat.");
+                }
+
+                // 3. Setup Slider
+                globalSlider.max = totalDurationSeconds;
+                totalTimeText.innerText = formatTime(totalDurationSeconds);
+                globalSlider.disabled = false;
+
+                // 4. Load Stream Awal (Detik 0)
+                videoPlayer.src = `${API_BASE}/stream/${uuid}?start=0`;
+                videoPlayer.load();
+                videoPlayer.play().catch(e => console.log("Autoplay blocked"));
+
+                // 5. Load Subtitles
+                cachedSubtitles = []; // Reset cache
+                if (node.subtitles) {
+                    // Kita fetch semua subtitle text-nya dulu dan simpan di memori
+                    document.getElementById('subStatus').innerText = "Downloading subtitles...";
+                    
+                    for (let i = 0; i < node.subtitles.length; i++) {
+                        const subData = node.subtitles[i];
+                        try {
+                            // Tentukan URL
+                            let fileUrl = subData.path.includes('temp') 
+                                ? `${BASE_URL}/temp/${subData.path.split(/[\\/]/).pop()}` 
+                                : `${BASE_URL}/uploads/${subData.path.split(/[\\/]/).pop()}`;
+                            
+                            const res = await fetch(fileUrl);
+                            if(res.ok) {
+                                const txt = await res.text();
+                                // Simpan ke cache global
+                                cachedSubtitles.push({
+                                    label: subData.label,
+                                    language: subData.language,
+                                    rawText: txt // Simpan teks asli (SRT/VTT)
+                                });
+                                
+                                // Tambahkan ke Dropdown
+                                const opt = document.createElement('option');
+                                opt.value = i; 
+                                opt.text = `${subData.label} (${subData.language})`;
+                                subtitleSelect.appendChild(opt);
+                            }
+                        } catch(e) { console.error(e); }
+                    }
+                    document.getElementById('subStatus').innerText = `${cachedSubtitles.length} Subs Loaded`;
+                }
+
+            } catch (err) {
+                alert("Error: " + err.message);
+            }
+        }
+
+        // --- LOGIC UTAMA SLIDER ---
+
+        // 1. Saat video diputar, update posisi slider
+        videoPlayer.ontimeupdate = () => {
+            // Waktu Asli = Offset Awal Stream + Posisi Player Browser
+            // Contoh: Kita request start=3600 (1 jam). Player browser bilang currentTime=10 detik.
+            // Maka Waktu Asli = 3610 detik.
+            const realCurrentTime = currentStreamOffset + videoPlayer.currentTime;
+            
+            // Jangan update slider jika user sedang men-drag (agar tidak loncat2)
+            if (!isDragging) {
+                globalSlider.value = realCurrentTime;
+                currentTimeText.innerText = formatTime(realCurrentTime);
+            }
+        };
+
+        // 2. Saat User GESER Slider (Hanya update angka, belum request server)
+        let isDragging = false;
+        function updateLabel(val) {
+            isDragging = true;
+            currentTimeText.innerText = formatTime(val);
+        }
+
+        // 3. Saat User LEPAS Slider (Request Server / Seeking)
+        function userSeek(val) {
+            isDragging = false;
+            const seekSeconds = parseInt(val);
+            const uuid = document.getElementById('uuidInput').value.trim();
+            
+            // Simpan offset baru
+            currentStreamOffset = seekSeconds;
+
+            const wasPlaying = !videoPlayer.paused;
+            videoPlayer.src = `${API_BASE}/stream/${uuid}?start=${seekSeconds}&t=${Date.now()}`;
+            
+            if (wasPlaying) videoPlayer.play();
+
+            // --- PERBAIKAN SUBTITLE ---
+            // Saat di-seek, waktu video reset ke 0. Kita harus geser waktu subtitle.
+            reloadCurrentSubtitle();
+        }
+
+        // --- Helper Subtitle & Player ---
+        function togglePlay() {
+            if (videoPlayer.paused) videoPlayer.play();
+            else videoPlayer.pause();
+        }
+
+        async function addSubtitleTrack(subData, index) {
+            // (Logika sama persis seperti sebelumnya)
+            // ... copy paste logic subtitle fetch & blob disini jika perlu ...
+            // Agar ringkas, saya persingkat, asumsi fungsi addSubtitleTrack sama spt sebelumnya
+            try {
+                let fileUrl = subData.path.includes('temp') ? `${BASE_URL}/temp/${subData.path.split(/[\\/]/).pop()}` : `${BASE_URL}/uploads/${subData.path.split(/[\\/]/).pop()}`;
+                const res = await fetch(fileUrl);
+                if(!res.ok) return;
+                const txt = await res.text();
+                const vtt = "WEBVTT\n\n" + txt.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2'); // Simple Regex Replace
+                const blob = new Blob([vtt], { type: 'text/vtt' });
+                const track = document.createElement('track');
+                track.kind = 'subtitles'; 
+                track.label = subData.label; 
+                track.srclang = subData.language; 
+                track.src = URL.createObjectURL(blob);
+                if(index===0) track.default = true;
+                videoPlayer.appendChild(track);
+                
+                const opt = document.createElement('option');
+                opt.value = index; opt.text = subData.label;
+                subtitleSelect.appendChild(opt);
+            } catch(e) {}
+        }
+
+        function changeSubtitle() {
+            const idx = subtitleSelect.value;
+            for(let i=0; i<videoPlayer.textTracks.length; i++) videoPlayer.textTracks[i].mode = 'hidden';
+            if(idx !== "") videoPlayer.textTracks[idx].mode = 'showing';
+        }
+
+        function reloadCurrentSubtitle() {
+            const idx = subtitleSelect.value;
+            
+            // 1. BERSIHKAN TRACK LAMA (AGRESIF)
+            // Matikan semua track dulu agar browser berhenti merender
+            Array.from(videoPlayer.textTracks).forEach(track => {
+                track.mode = 'disabled'; 
+            });
+            // Hapus elemen track dari DOM
+            videoPlayer.querySelectorAll('track').forEach(el => el.remove());
+
+            if (idx === "") return; // Jika user memilih "Matikan Subtitle"
+
+            const subData = cachedSubtitles[idx];
+            if (!subData) return;
+
+            // 2. SIAPKAN VTT
+            let vttText = subData.rawText;
+            if (!vttText.startsWith('WEBVTT')) {
+                vttText = srtToVtt(vttText);
+            }
+
+            // 3. GESER WAKTU & FILTER (Hanya ambil subtitle masa depan)
+            const adjustedVtt = adjustVttTimes(vttText, currentStreamOffset);
+
+            // 4. PASANG TRACK BARU
+            const blob = new Blob([adjustedVtt], { type: 'text/vtt' });
+            const trackUrl = URL.createObjectURL(blob);
+            
+            const track = document.createElement('track');
+            track.kind = 'subtitles';
+            track.label = subData.label;
+            track.srclang = subData.language;
+            track.src = trackUrl;
+            track.default = true;
+            
+            videoPlayer.appendChild(track);
+
+            // Force browser untuk segera membaca track baru
+            track.onload = () => {
+                track.track.mode = 'showing';
+                URL.revokeObjectURL(trackUrl); // Bersihkan memori blob agar ringan
+            };
+        }
+
+        // --- HELPER BARU: LEBIH PINTAR (FILTERING) ---
+        function adjustVttTimes(vttContent, offsetSeconds) {
+            const lines = vttContent.split('\n');
+            let output = [];
+            let skipNextLine = false; // Flag untuk skip teks dialog jika timestamp-nya dibuang
+
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i].trim();
+
+                // Cek apakah ini baris Timestamp? (00:00:01.000 --> 00:00:05.000)
+                if (line.includes('-->')) {
+                    const parts = line.split('-->');
+                    if (parts.length === 2) {
+                        const startSec = parseVttTime(parts[0].trim());
+                        const endSec = parseVttTime(parts[1].trim());
+
+                        // HITUNG WAKTU BARU
+                        const newStart = startSec - offsetSeconds;
+                        const newEnd = endSec - offsetSeconds;
+
+                        // LOGIKA FILTERING (PENTING!):
+                        
+                        // Kasus 1: Subtitle sudah lewat (Masa lalu). BUANG.
+                        // Contoh: Kita seek ke menit 10, ini dialog menit 5.
+                        if (newEnd <= 0) {
+                            skipNextLine = true; // Tandai untuk membuang teks dialog di bawahnya
+                            continue; // Skip baris timestamp ini
+                        }
+
+                        // Kasus 2: Kita seek pas di tengah-tengah dialog ini.
+                        // Contoh: Dialog 00:07:00 - 00:07:05. Kita seek ke 00:07:02.
+                        // Hasil: Start jadi -2 (minus), End jadi 3.
+                        // Solusi: Paksa Start jadi 0 (muncul sekarang juga).
+                        let finalStart = newStart;
+                        if (newStart < 0) finalStart = 0;
+
+                        // Simpan Timestamp Baru
+                        output.push(`${formatVttTime(finalStart)} --> ${formatVttTime(newEnd)}`);
+                        skipNextLine = false; // Dialog di bawahnya valid, jangan dibuang
+                    } else {
+                        output.push(line); // Baris aneh, simpan saja
+                    }
+                } 
+                else if (line === '' || line === 'WEBVTT') {
+                    output.push(line); // Header atau baris kosong, simpan
+                }
+                else {
+                    // Ini adalah Teks Dialog
+                    if (!skipNextLine) {
+                        output.push(line);
+                    }
+                    // Jika skipNextLine == true, berarti teks ini milik timestamp masa lalu yang kita buang tadi.
+                }
+            }
+            
+            return output.join('\n');
+        }
+
+        // Helper Parse & Format (Tetap sama, pastikan ada)
+        function parseVttTime(timeStr) {
+            const parts = timeStr.split(':');
+            // Handle format MM:SS.mmm (kadang muncul) atau HH:MM:SS.mmm
+            let h=0, m=0, s=0, ms=0;
+            
+            if (parts.length === 3) {
+                h = parseInt(parts[0]);
+                m = parseInt(parts[1]);
+                const secParts = parts[2].split(/[\.,]/);
+                s = parseInt(secParts[0]);
+                ms = parseInt(secParts[1] || 0);
+            } else if (parts.length === 2) {
+                m = parseInt(parts[0]);
+                const secParts = parts[1].split(/[\.,]/);
+                s = parseInt(secParts[0]);
+                ms = parseInt(secParts[1] || 0);
+            }
+            
+            return (h * 3600) + (m * 60) + s + (ms / 1000);
+        }
+
+        function formatVttTime(totalSeconds) {
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            const s = Math.floor(totalSeconds % 60);
+            const ms = Math.floor((totalSeconds % 1) * 1000);
+            
+            const hh = h.toString().padStart(2, '0');
+            const mm = m.toString().padStart(2, '0');
+            const ss = s.toString().padStart(2, '0');
+            const mms = ms.toString().padStart(3, '0');
+            
+            return `${hh}:${mm}:${ss}.${mms}`;
+        }
+
+        // Helper Change di Dropdown
+        function changeSubtitle() {
+            reloadCurrentSubtitle();
+        }
+
+        function srtToVtt(srtData) {
+            let vtt = "WEBVTT\n\n";
+            // Normalisasi baris baru windows/unix
+            let lines = srtData.replace(/\r\n/g, '\n').split('\n');
+            
+            for (let line of lines) {
+                // Convert timestamp srt (00:00:00,000) ke vtt (00:00:00.000)
+                if (line.match(/\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}/)) {
+                    vtt += line.replace(/,/g, '.') + '\n';
+                } else {
+                    vtt += line + '\n';
+                }
+            }
+            return vtt;
+        }
+    </script>
+</body>
+</html>
