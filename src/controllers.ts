@@ -71,14 +71,6 @@ export const updateMeta = async (req: Request, res: Response) => {
     if (!node) return res.status(404).json({ error: "File not found" });
 
     const validStates: MetadataState[] = ['Unset', 'Sync TMDB', 'Manual Set', 'Extract Subs', 'Set Subs'];
-    
-    let targetState: MetadataState = state;
-    if (!targetState) {
-        if (tmdbId) targetState = 'Sync TMDB';
-        else targetState = 'Manual Set';
-    }
-
-    if (!validStates.includes(targetState)) targetState = 'Manual Set';
 
     try {
         let newMeta: MetaData;
@@ -135,7 +127,7 @@ export const updateMeta = async (req: Request, res: Response) => {
             runtime: tmdb.runtime || (tmdb.episode_run_time ? tmdb.episode_run_time[0] : 0) || 0,
             episode_number,
             season_number,
-            state: 'Sync TMDB'
+            state: state
         };
 
         node.meta = newMeta;

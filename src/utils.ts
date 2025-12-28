@@ -98,9 +98,16 @@ export const scanDirectory = async (
         return [];
     }
 
+    // === MODIFIKASI DIMULAI DISINI ===
+    // Filter folder yang ingin di-skip sebelum diproses
+    const IGNORED_FOLDERS = ['$RECYCLE.BIN', 'System Volume Information', 'Recycle Bin'];
+    items = items.filter(item => !IGNORED_FOLDERS.includes(item));
+    // === MODIFIKASI SELESAI ===
+
     const results = await Promise.all(items.map(async (item) => {
         const fullPath = path.join(dirPath, item);
         
+        // ... sisa kode tetap sama ...
         if (onProgress) onProgress(`Scanning: ${item}`);
 
         let stats;
@@ -120,7 +127,8 @@ export const scanDirectory = async (
             mtime: mtime,
             children: [],
         };
-
+        
+        // ... logika pengecekan oldNode (unchanged) ...
         const oldNode = findNodeByPath(oldData, fullPath);
         let isUnchanged = false;
 
@@ -135,7 +143,6 @@ export const scanDirectory = async (
                 node.mediaInfo = oldNode.mediaInfo; 
             } else {
                 node.uuid = oldNode.uuid;
-                
                 if (onProgress) onProgress(`File Changed: ${item} (Resetting Meta)`);
             }
         }
@@ -157,9 +164,7 @@ export const scanDirectory = async (
 
             if (isVideo) {
                 if (!isUnchanged || !node.mediaInfo) {
-                    
                     if (onProgress) onProgress(`Analyzing Video: ${item}...`);
-                    
                     const info = await getVideoMetadata(fullPath);
                     if (info) {
                         node.mediaInfo = info;
